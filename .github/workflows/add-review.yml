@@ -1,0 +1,65 @@
+name: Adicionar depoimento (reutilizável)
+
+on:
+  workflow_call:
+    inputs:
+      nome:      { type: string, required: true }
+      estrelas:  { type: string, default: "5" }
+      texto:     { type: string, default: "" }
+      cargo:     { type: string, default: "" }
+      data:      { type: string, default: "" }
+      idioma:    { type: string, default: "pt" }
+      fonte:     { type: string, default: "google" }
+      json_path: { type: string, default: "js/reviews.json" }
+      html_path: { type: string, default: "index.html" }
+      layout:    { type: string, default: "list" }
+
+permissions:
+  contents: write
+
+jobs:
+  adicionar:
+    runs-on: ubuntu-latest
+    env:
+      JSON_PATH: ${{ inputs.json_path }}
+      HTML_PATH: ${{ inputs.html_path }}
+      LAYOUT: ${{ inputs.layout }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: PauloFOJr/reviews-kit
+          ref: v1
+          path: .kit
+          persist-credentials: false
+
+      - name: Adicionar ao JSON
+        env:
+          NOME: ${{ inputs.nome }}
+          CARGO: ${{ inputs.cargo }}
+          TEXTO: ${{ inputs.texto }}
+          ESTRELAS: ${{ inputs.estrelas }}
+          DATA: ${{ inputs.data }}
+          IDIOMA: ${{ inputs.idioma }}
+          FONTE: ${{ inputs.fonte }}
+        run: |
+          jq --arg nome "$NOME" --arg cargo "$CARGO" --arg texto "$TEXTO" \
+             --arg data "$DATA" --arg lang "$IDIOMA" --arg fonte "$FONTE" \
+             --argjson estrelas "$ESTRELAS" \
+             '[{nome:$nome, cargo:$cargo, texto:$texto, estrelas:$estrelas, lang:$lang, fonte:$fonte} + (if $data != "" then {data:$data} else {} end)] + .' \
+             "$JSON_PATH" > /tmp/reviews.json
+          mv /tmp/reviews.json "$JSON_PATH"
+
+      - name: Gerar HTML
+        run: node .kit/scripts/render.mjs "$JSON_PATH" "$HTML_PATH" "$LAYOUT"
+
+      - name: Commit e push
+        env:
+          NOME: ${{ inputs.nome }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$JSON_PATH" "$HTML_PATH"
+          git commit -m "Novo depoimento: $NOME"
+          git push
